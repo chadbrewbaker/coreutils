@@ -108,6 +108,7 @@ mod options {
     pub const REVERSE: &str = "reverse";
     pub const STABLE: &str = "stable";
     pub const UNIQUE: &str = "unique";
+    pub const WORDCOUNT: &str = "wordcount";
     pub const KEY: &str = "key";
     pub const SEPARATOR: &str = "field-separator";
     pub const ZERO_TERMINATED: &str = "zero-terminated";
@@ -312,6 +313,7 @@ pub struct GlobalSettings {
     reverse: bool,
     stable: bool,
     unique: bool,
+    wordcount: bool,
     check: bool,
     check_silent: bool,
     salt: Option<[u8; 16]>,
@@ -402,6 +404,7 @@ impl Default for GlobalSettings {
             reverse: false,
             stable: false,
             unique: false,
+            wordcount: false,
             check: false,
             check_silent: false,
             salt: None,
@@ -1192,6 +1195,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.reverse = matches.is_present(options::REVERSE);
     settings.stable = matches.is_present(options::STABLE);
     settings.unique = matches.is_present(options::UNIQUE);
+    settings.wordcount = matches.is_present(options::WORDCOUNT);
 
     if files.is_empty() {
         /* if no file, default to stdin */
@@ -1419,6 +1423,12 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('u')
                 .long(options::UNIQUE)
                 .help("output only the first of an equal run"),
+        )
+       .arg(
+            Arg::new(options::WORDCOUNT)
+               // .short('u')
+                .long(options::WORDCOUNT)
+                .help("count equal run"),
         )
         .arg(
             Arg::new(options::KEY)
