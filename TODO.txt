@@ -1,0 +1,20 @@
+
+* wire command line --wordcount so it runs the -u option.
+* malloc array of 64k blocks
+* tree to store 64k sorted blocks
+* 64k block wordsort
+* merge-sort for blocks
+* compare with existing implementation
+
+
+
+notes
+
+* burstsort https://www.cs.amherst.edu/~ccmcgeoch/cs34/papers/a2_5-sinha.pdf
+
+* x86 cache pinning https://www.intel.com/content/www/us/en/developer/articles/technical/introduction-to-cache-allocation-technology.html
+It allows reserving space in the L3 cache for a certain process.
+And here is the library to do that:
+https://github.com/intel/intel-cmt-cat
+
+
