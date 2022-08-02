@@ -26,7 +26,7 @@ wild = "2.0"
 # * optional
 itertools = { version="0.10.0", optional=true }
 thiserror = { version="1.0", optional=true }
-time = { version="<= 0.3", optional=true, features = ["formatting", "local-offset", "macros"] }
+time = { version="<= 0.4", optional=true, features = ["formatting", "local-offset", "macros"] }
 # * "problem" dependencies (pinned)
 data-encoding = { version="2.1", optional=true }
 data-encoding-macro = { version="0.1.12", optional=true }
@@ -37,7 +37,7 @@ os_display = "0.1.3"
 
 [target.'cfg(unix)'.dependencies]
 walkdir = { version="2.3.2", optional=true }
-nix = { version = "0.24.1", optional = true, default-features = false, features = ["fs", "uio", "zerocopy"] }
+nix = { version = "0.24.2", optional = true, default-features = false, features = ["fs", "uio", "zerocopy"] }
 
 [dev-dependencies]
 clap = "3.1"
