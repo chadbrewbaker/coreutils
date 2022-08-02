@@ -1,3 +1,4 @@
+// spell-checker:ignore powf
 use uucore::display::Quotable;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
@@ -79,7 +80,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('E') => Some((RawSuffix::E, with_i)),
         Some('Z') => Some((RawSuffix::Z, with_i)),
         Some('Y') => Some((RawSuffix::Y, with_i)),
-        Some('0'..='9') => None,
+        Some('0'..='9') if !with_i => None,
         _ => return Err(format!("invalid suffix in input: {}", s.quote())),
     };
 
@@ -94,6 +95,18 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         .map_err(|_| format!("invalid number: {}", s.quote()))?;
 
     Ok((number, suffix))
+}
+
+// Returns the implicit precision of a number, which is the count of digits after the dot. For
+// example, 1.23 has an implicit precision of 2.
+fn parse_implicit_precision(s: &str) -> usize {
+    match s.split_once('.') {
+        Some((_, decimal_part)) => decimal_part
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .count(),
+        None => 0,
+    }
 }
 
 fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
@@ -145,7 +158,16 @@ fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
     let (i, suffix) = parse_suffix(s)?;
     let i = i * (opts.from_unit as f64);
 
-    remove_suffix(i, suffix, &opts.from).map(|n| if n < 0.0 { -n.abs().ceil() } else { n.ceil() })
+    remove_suffix(i, suffix, &opts.from).map(|n| {
+        // GNU numfmt doesn't round values if no --from argument is provided by the user
+        if opts.from == Unit::None {
+            n
+        } else if n < 0.0 {
+            -n.abs().ceil()
+        } else {
+            n.ceil()
+        }
+    })
 }
 
 /// Divide numerator by denominator, with rounding.
@@ -185,7 +207,19 @@ pub fn div_round(n: f64, d: f64, method: RoundMethod) -> f64 {
     }
 }
 
-fn consider_suffix(n: f64, u: &Unit, round_method: RoundMethod) -> Result<(f64, Option<Suffix>)> {
+// Rounds to the specified number of decimal points.
+fn round_with_precision(n: f64, method: RoundMethod, precision: usize) -> f64 {
+    let p = 10.0_f64.powf(precision as f64);
+
+    method.round(p * n) / p
+}
+
+fn consider_suffix(
+    n: f64,
+    u: &Unit,
+    round_method: RoundMethod,
+    precision: usize,
+) -> Result<(f64, Option<Suffix>)> {
     use crate::units::RawSuffix::*;
 
     let abs_n = n.abs();
@@ -211,7 +245,11 @@ fn consider_suffix(n: f64, u: &Unit, round_method: RoundMethod) -> Result<(f64, 
         _ => return Err("Number is too big and unsupported".to_string()),
     };
 
-    let v = div_round(n, bases[i], round_method);
+    let v = if precision > 0 {
+        round_with_precision(n / bases[i], round_method, precision)
+    } else {
+        div_round(n, bases[i], round_method)
+    };
 
     // check if rounding pushed us into the next base
     if v.abs() >= bases[1] {
@@ -221,11 +259,31 @@ fn consider_suffix(n: f64, u: &Unit, round_method: RoundMethod) -> Result<(f64, 
     }
 }
 
-fn transform_to(s: f64, opts: &TransformOptions, round_method: RoundMethod) -> Result<String> {
-    let (i2, s) = consider_suffix(s, &opts.to, round_method)?;
+fn transform_to(
+    s: f64,
+    opts: &TransformOptions,
+    round_method: RoundMethod,
+    precision: usize,
+) -> Result<String> {
+    let (i2, s) = consider_suffix(s, &opts.to, round_method, precision)?;
     let i2 = i2 / (opts.to_unit as f64);
     Ok(match s {
+        None if precision > 0 => {
+            format!(
+                "{:.precision$}",
+                round_with_precision(i2, round_method, precision),
+                precision = precision
+            )
+        }
         None => format!("{}", i2),
+        Some(s) if precision > 0 => {
+            format!(
+                "{:.precision$}{}",
+                i2,
+                DisplayableSuffix(s),
+                precision = precision
+            )
+        }
         Some(s) if i2.abs() < 10.0 => format!("{:.1}{}", i2, DisplayableSuffix(s)),
         Some(s) => format!("{:.0}{}", i2, DisplayableSuffix(s)),
     })
@@ -242,10 +300,19 @@ fn format_string(
         None => source,
     };
 
+    let precision = if let Some(p) = options.format.precision {
+        p
+    } else if options.transform.from == Unit::None && options.transform.to == Unit::None {
+        parse_implicit_precision(source_without_suffix)
+    } else {
+        0
+    };
+
     let number = transform_to(
         transform_from(source_without_suffix, &options.transform)?,
         &options.transform,
         options.round,
+        precision,
     )?;
 
     // bring back the suffix before applying padding
@@ -254,15 +321,34 @@ fn format_string(
         None => number,
     };
 
-    Ok(match implicit_padding.unwrap_or(options.padding) {
+    let padding = options
+        .format
+        .padding
+        .unwrap_or_else(|| implicit_padding.unwrap_or(options.padding));
+
+    let padded_number = match padding {
         0 => number_with_suffix,
+        p if p > 0 && options.format.zero_padding => {
+            let zero_padded = format!("{:0>padding$}", number_with_suffix, padding = p as usize);
+
+            match implicit_padding.unwrap_or(options.padding) {
+                0 => zero_padded,
+                p if p > 0 => format!("{:>padding$}", zero_padded, padding = p as usize),
+                p => format!("{:<padding$}", zero_padded, padding = p.unsigned_abs()),
+            }
+        }
         p if p > 0 => format!("{:>padding$}", number_with_suffix, padding = p as usize),
         p => format!(
             "{:<padding$}",
             number_with_suffix,
             padding = p.unsigned_abs()
         ),
-    })
+    };
+
+    Ok(format!(
+        "{}{}{}",
+        options.format.prefix, padded_number, options.format.suffix
+    ))
 }
 
 fn format_and_print_delimited(s: &str, options: &NumfmtOptions) -> Result<()> {
@@ -331,5 +417,42 @@ pub fn format_and_print(s: &str, options: &NumfmtOptions) -> Result<()> {
     match &options.delimiter {
         Some(_) => format_and_print_delimited(s, options),
         None => format_and_print_whitespace(s, options),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_round_with_precision() {
+        let rm = RoundMethod::FromZero;
+        assert_eq!(1.0, round_with_precision(0.12345, rm, 0));
+        assert_eq!(0.2, round_with_precision(0.12345, rm, 1));
+        assert_eq!(0.13, round_with_precision(0.12345, rm, 2));
+        assert_eq!(0.124, round_with_precision(0.12345, rm, 3));
+        assert_eq!(0.1235, round_with_precision(0.12345, rm, 4));
+        assert_eq!(0.12345, round_with_precision(0.12345, rm, 5));
+
+        let rm = RoundMethod::TowardsZero;
+        assert_eq!(0.0, round_with_precision(0.12345, rm, 0));
+        assert_eq!(0.1, round_with_precision(0.12345, rm, 1));
+        assert_eq!(0.12, round_with_precision(0.12345, rm, 2));
+        assert_eq!(0.123, round_with_precision(0.12345, rm, 3));
+        assert_eq!(0.1234, round_with_precision(0.12345, rm, 4));
+        assert_eq!(0.12345, round_with_precision(0.12345, rm, 5));
+    }
+
+    #[test]
+    fn test_parse_implicit_precision() {
+        assert_eq!(0, parse_implicit_precision(""));
+        assert_eq!(0, parse_implicit_precision("1"));
+        assert_eq!(1, parse_implicit_precision("1.2"));
+        assert_eq!(2, parse_implicit_precision("1.23"));
+        assert_eq!(3, parse_implicit_precision("1.234"));
+        assert_eq!(0, parse_implicit_precision("1K"));
+        assert_eq!(1, parse_implicit_precision("1.2K"));
+        assert_eq!(2, parse_implicit_precision("1.23K"));
+        assert_eq!(3, parse_implicit_precision("1.234K"));
     }
 }

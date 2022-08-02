@@ -151,6 +151,7 @@ impl Hash for FileInformation {
     }
 }
 
+/// resolve a relative path
 pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
     if path.components().all(|e| e != Component::ParentDir) {
         return path.into();
@@ -200,10 +201,12 @@ pub enum ResolveMode {
     Logical,
 }
 
-// copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
-// both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
-// for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
-// replace this once that lands
+/// Normalize a path by removing relative information
+/// For example, convert 'bar/../foo/bar.txt' => 'foo/bar.txt'
+/// copied from `<https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90>`
+/// both projects are MIT `<https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT>`
+/// for std impl progress see rfc `<https://github.com/rust-lang/rfcs/issues/2208>`
+/// replace this once that lands
 pub fn normalize_path(path: &Path) -> PathBuf {
     let mut components = path.components().peekable();
     let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
@@ -393,12 +396,15 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
 }
 
 #[cfg(unix)]
+/// Display the permissions of a file
+/// On non unix like system, just show '----------'
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     let mode: mode_t = metadata.mode() as mode_t;
     display_permissions_unix(mode, display_file_type)
 }
 
 #[cfg(unix)]
+/// Display the permissions of a file on a unix like system
 pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String {
     let mut result;
     if display_file_type {
@@ -463,11 +469,10 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     result
 }
 
-// For some programs like install or mkdir, dir/. can be provided
-// Special case to match GNU's behavior:
-// install -d foo/. should work and just create foo/
-// std::fs::create_dir("foo/."); fails in pure Rust
-// See also mkdir.rs for another occurrence of this
+/// For some programs like install or mkdir, dir/. can be provided
+/// Special case to match GNU's behavior:
+/// install -d foo/. should work and just create foo/
+/// std::fs::create_dir("foo/."); fails in pure Rust
 pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
     if path.to_string_lossy().ends_with("/.") {
         // Do a simple dance to strip the "/."
@@ -475,6 +480,54 @@ pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
     } else {
         path.to_path_buf()
     }
+}
+
+/// Checks if `p1` and `p2` are the same file.
+/// If error happens when trying to get files' metadata, returns false
+pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool) -> bool {
+    infos_refer_to_same_file(
+        FileInformation::from_path(p1, dereference),
+        FileInformation::from_path(p2, dereference),
+    )
+}
+
+/// Checks if `p1` and `p2` are the same file information.
+/// If error happens when trying to get files' metadata, returns false
+pub fn infos_refer_to_same_file(
+    info1: IOResult<FileInformation>,
+    info2: IOResult<FileInformation>,
+) -> bool {
+    if let Ok(info1) = info1 {
+        if let Ok(info2) = info2 {
+            return info1 == info2;
+        }
+    }
+    false
+}
+
+/// Converts absolute `path` to be relative to absolute `to` path.
+pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2) -> PathBuf {
+    let path = path.as_ref();
+    let to = to.as_ref();
+    let common_prefix_size = path
+        .components()
+        .zip(to.components())
+        .take_while(|(first, second)| first == second)
+        .count();
+    let path_suffix = path
+        .components()
+        .skip(common_prefix_size)
+        .map(|x| x.as_os_str());
+    let mut components: Vec<_> = to
+        .components()
+        .skip(common_prefix_size)
+        .map(|_| Component::ParentDir.as_os_str())
+        .chain(path_suffix)
+        .collect();
+    if components.is_empty() {
+        components.push(Component::CurDir.as_os_str());
+    }
+    components.iter().collect()
 }
 
 #[cfg(test)]

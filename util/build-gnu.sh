@@ -183,7 +183,7 @@ sed -i "s/\(\(b2[ml]_[69]\|b32h_[56]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"
 sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/misc/basenc.pl
 
 # basenc: swap out error message for unexpected arg
-sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: Found argument '--foobar' which wasn't expected, or isn't valid in this context\n\nUSAGE:\n    basenc [OPTION]... [FILE]\n\nFor more information try --help\n\"}]/" tests/misc/basenc.pl
+sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: Found argument '--foobar' which wasn't expected, or isn't valid in this context\n\n\tIf you tried to supply \`--foobar\` as a value rather than a flag, use \`-- --foobar\`\n\nUSAGE:\n    basenc [OPTION]... [FILE]\n\nFor more information try --help\n\"}]/" tests/misc/basenc.pl
 sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/misc/basenc.pl
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
@@ -205,8 +205,7 @@ sed -i -e "s/cat opts/sed -i -e \"s| <.\*>$||g\" opts/" tests/misc/usage_vs_geto
 sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
 
 # Update the GNU error message to match ours
-sed -i -e "s/ln: 'f' and 'f' are the same file/ln: failed to link 'f' to 'f': Same file/g" tests/ln/hard-backup.sh
-sed -i -e "s/failed to access 'no-such-dir'\":/failed to link 'no-such-dir'\"/" -e "s/link-to-dir: hard link not allowed for directory/failed to link 'link-to-dir' to/" -e "s|link-to-dir/: hard link not allowed for directory|failed to link 'link-to-dir/' to|" tests/ln/hard-to-sym.sh
+sed -i -e "s/link-to-dir: hard link not allowed for directory/failed to create hard link 'link-to-dir' =>/" -e "s|link-to-dir/: hard link not allowed for directory|failed to create hard link 'link-to-dir/' =>|" tests/ln/hard-to-sym.sh
 
 
 # GNU sleep accepts some crazy string, not sure we should match this behavior

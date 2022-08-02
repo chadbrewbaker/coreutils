@@ -3,6 +3,22 @@
 use crate::common::util::*;
 
 #[test]
+fn test_should_not_round_floats() {
+    new_ucmd!()
+        .args(&["0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
+        .succeeds()
+        .stdout_is("0.99\n1.01\n1.1\n1.22\n0.1\n-0.1\n");
+}
+
+#[test]
+fn test_should_preserve_trailing_zeros() {
+    new_ucmd!()
+        .args(&["0.1000", "10.00"])
+        .succeeds()
+        .stdout_is("0.1000\n10.00\n");
+}
+
+#[test]
 fn test_from_si() {
     new_ucmd!()
         .args(&["--from=si"])
@@ -208,11 +224,16 @@ fn test_should_report_invalid_empty_number_on_blank_stdin() {
 
 #[test]
 fn test_should_report_invalid_suffix_on_stdin() {
-    new_ucmd!()
-        .args(&["--from=auto"])
-        .pipe_in("1k")
-        .run()
-        .stderr_is("numfmt: invalid suffix in input: '1k'\n");
+    for c in b'a'..=b'z' {
+        new_ucmd!()
+            .args(&["--from=auto"])
+            .pipe_in(format!("1{}", c as char))
+            .run()
+            .stderr_is(format!(
+                "numfmt: invalid suffix in input: '1{}'\n",
+                c as char
+            ));
+    }
 
     // GNU numfmt reports this one as “invalid number”
     new_ucmd!()
@@ -290,11 +311,9 @@ fn test_leading_whitespace_in_free_argument_should_imply_padding() {
 }
 
 #[test]
-#[ignore]
 fn test_should_calculate_implicit_padding_per_free_argument() {
     new_ucmd!()
         .args(&["--from=auto", "   1Ki", "        2K"])
-        .pipe_in("   1Ki\n        2K")
         .run()
         .stdout_is("  1024\n      2000\n");
 }
@@ -661,4 +680,254 @@ fn test_valid_but_forbidden_suffix() {
                 number
             ));
     }
+}
+
+#[test]
+fn test_format() {
+    new_ucmd!()
+        .args(&["--format=--%f--", "50"])
+        .succeeds()
+        .stdout_is("--50--\n");
+}
+
+#[test]
+fn test_format_with_separate_value() {
+    new_ucmd!()
+        .args(&["--format", "--%f--", "50"])
+        .succeeds()
+        .stdout_is("--50--\n");
+}
+
+#[test]
+fn test_format_padding_with_prefix_and_suffix() {
+    new_ucmd!()
+        .args(&["--format=--%6f--", "50"])
+        .succeeds()
+        .stdout_is("--    50--\n");
+}
+
+#[test]
+fn test_format_negative_padding_with_prefix_and_suffix() {
+    new_ucmd!()
+        .args(&["--format=--%-6f--", "50"])
+        .succeeds()
+        .stdout_is("--50    --\n");
+}
+
+#[test]
+fn test_format_with_format_padding_overriding_padding_option() {
+    new_ucmd!()
+        .args(&["--format=%6f", "--padding=10", "1234"])
+        .succeeds()
+        .stdout_is("  1234\n");
+}
+
+#[test]
+fn test_format_with_format_padding_overriding_implicit_padding() {
+    new_ucmd!()
+        .args(&["--format=%6f", "      1234"])
+        .succeeds()
+        .stdout_is("  1234\n");
+}
+
+#[test]
+fn test_format_with_negative_format_padding_and_suffix() {
+    new_ucmd!()
+        .args(&["--format=%-6f", "1234 ?"])
+        .succeeds()
+        .stdout_is("1234   ?\n");
+}
+
+#[test]
+fn test_format_with_zero_padding() {
+    let formats = vec!["%06f", "%0 6f"];
+
+    for format in formats {
+        new_ucmd!()
+            .args(&[format!("--format={}", format), String::from("1234")])
+            .succeeds()
+            .stdout_is("001234\n");
+    }
+}
+
+#[test]
+fn test_format_with_zero_padding_and_padding_option() {
+    new_ucmd!()
+        .args(&["--format=%06f", "--padding=8", "1234"])
+        .succeeds()
+        .stdout_is("  001234\n");
+}
+
+#[test]
+fn test_format_with_zero_padding_and_negative_padding_option() {
+    new_ucmd!()
+        .args(&["--format=%06f", "--padding=-8", "1234"])
+        .succeeds()
+        .stdout_is("001234  \n");
+}
+
+#[test]
+fn test_format_with_zero_padding_and_implicit_padding() {
+    new_ucmd!()
+        .args(&["--format=%06f", "    1234"])
+        .succeeds()
+        .stdout_is("  001234\n");
+}
+
+#[test]
+fn test_format_with_zero_padding_and_suffix() {
+    new_ucmd!()
+        .args(&["--format=%06f", "1234 ?"])
+        .succeeds()
+        .stdout_is("001234 ?\n");
+}
+
+#[test]
+fn test_format_with_precision() {
+    let values = vec![("0.99", "1.0"), ("1", "1.0"), ("1.01", "1.1")];
+
+    for (input, expected) in values {
+        new_ucmd!()
+            .args(&["--format=%.1f", input])
+            .succeeds()
+            .stdout_is(format!("{}\n", expected));
+    }
+
+    let values = vec![("0.99", "0.99"), ("1", "1.00"), ("1.01", "1.01")];
+
+    for (input, expected) in values {
+        new_ucmd!()
+            .args(&["--format=%.2f", input])
+            .succeeds()
+            .stdout_is(format!("{}\n", expected));
+    }
+}
+
+#[test]
+fn test_format_with_precision_and_down_rounding() {
+    let values = vec![("0.99", "0.9"), ("1", "1.0"), ("1.01", "1.0")];
+
+    for (input, expected) in values {
+        new_ucmd!()
+            .args(&["--format=%.1f", input, "--round=down"])
+            .succeeds()
+            .stdout_is(format!("{}\n", expected));
+    }
+}
+
+#[test]
+fn test_format_with_precision_and_to_arg() {
+    let values = vec![("%.1f", "10.0G"), ("%.4f", "9.9913G")];
+
+    for (format, expected) in values {
+        new_ucmd!()
+            .args(&[
+                format!("--format={}", format),
+                "9991239123".to_string(),
+                "--to=si".to_string(),
+            ])
+            .succeeds()
+            .stdout_is(format!("{}\n", expected));
+    }
+}
+
+#[test]
+fn test_format_preserve_trailing_zeros_if_no_precision_is_specified() {
+    let values = vec!["10.0", "0.0100"];
+
+    for value in values {
+        new_ucmd!()
+            .args(&["--format=%f", value])
+            .succeeds()
+            .stdout_is(format!("{}\n", value));
+    }
+}
+
+#[test]
+fn test_format_without_percentage_directive() {
+    let invalid_formats = vec!["", "hello"];
+
+    for invalid_format in invalid_formats {
+        new_ucmd!()
+            .arg(format!("--format={}", invalid_format))
+            .fails()
+            .code_is(1)
+            .stderr_contains(format!("format '{}' has no % directive", invalid_format));
+    }
+}
+
+#[test]
+fn test_format_with_percentage_directive_at_end() {
+    let invalid_format = "hello%";
+
+    new_ucmd!()
+        .arg(format!("--format={}", invalid_format))
+        .fails()
+        .code_is(1)
+        .stderr_contains(format!("format '{}' ends in %", invalid_format));
+}
+
+#[test]
+fn test_format_with_too_many_percentage_directives() {
+    let invalid_format = "%f %f";
+
+    new_ucmd!()
+        .arg(format!("--format={}", invalid_format))
+        .fails()
+        .code_is(1)
+        .stderr_contains(format!(
+            "format '{}' has too many % directives",
+            invalid_format
+        ));
+}
+
+#[test]
+fn test_format_with_invalid_format() {
+    let invalid_formats = vec!["%d", "% -43 f"];
+
+    for invalid_format in invalid_formats {
+        new_ucmd!()
+            .arg(format!("--format={}", invalid_format))
+            .fails()
+            .code_is(1)
+            .stderr_contains(format!(
+                "invalid format '{}', directive must be %[0]['][-][N][.][N]f",
+                invalid_format
+            ));
+    }
+}
+
+#[test]
+fn test_format_with_width_overflow() {
+    let invalid_format = "%18446744073709551616f";
+    new_ucmd!()
+        .arg(format!("--format={}", invalid_format))
+        .fails()
+        .code_is(1)
+        .stderr_contains(format!(
+            "invalid format '{}' (width overflow)",
+            invalid_format
+        ));
+}
+
+#[test]
+fn test_format_with_invalid_precision() {
+    let invalid_formats = vec!["%.-1f", "%.+1f", "%. 1f", "%.18446744073709551616f"];
+
+    for invalid_format in invalid_formats {
+        new_ucmd!()
+            .arg(format!("--format={}", invalid_format))
+            .fails()
+            .code_is(1)
+            .stderr_contains(format!("invalid precision in format '{}'", invalid_format));
+    }
+}
+
+#[test]
+fn test_format_grouping_conflicts_with_to_option() {
+    new_ucmd!()
+        .args(&["--format=%'f", "--to=si"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("grouping cannot be combined with --to");
 }

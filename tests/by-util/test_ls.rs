@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc
 
 #[cfg(not(windows))]
 extern crate libc;
@@ -794,6 +794,126 @@ fn test_ls_commas() {
             .succeeds()
             .stdout_only("test-commas-1, test-commas-2, test-commas-3,\ntest-commas-4\n");
     }
+}
+
+#[test]
+fn test_ls_zero() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("0-test-zero");
+    at.touch(&at.plus_as_string("2-test-zero"));
+    at.touch(&at.plus_as_string("3-test-zero"));
+
+    let ignored_opts = [
+        "--quoting-style=c",
+        "--color=always",
+        "-m",
+        "--hide-control-chars",
+    ];
+
+    scene
+        .ucmd()
+        .arg("--zero")
+        .succeeds()
+        .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
+
+    for opt in ignored_opts {
+        scene
+            .ucmd()
+            .args(&[opt, "--zero"])
+            .succeeds()
+            .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
+    }
+
+    scene
+        .ucmd()
+        .args(&["--zero", "--quoting-style=c"])
+        .succeeds()
+        .stdout_only("\"0-test-zero\"\x00\"2-test-zero\"\x00\"3-test-zero\"\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "--color=always"])
+        .succeeds()
+        .stdout_only("\x1b[1;34m0-test-zero\x1b[0m\x002-test-zero\x003-test-zero\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "-m"])
+        .succeeds()
+        .stdout_only("0-test-zero, 2-test-zero, 3-test-zero\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "--hide-control-chars"])
+        .succeeds()
+        .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "--quoting-style=c", "--zero"])
+        .succeeds()
+        .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
+
+    #[cfg(unix)]
+    {
+        at.touch(&at.plus_as_string("1\ntest-zero"));
+
+        let ignored_opts = [
+            "--quoting-style=c",
+            "--color=always",
+            "-m",
+            "--hide-control-chars",
+        ];
+
+        scene
+            .ucmd()
+            .arg("--zero")
+            .succeeds()
+            .stdout_only("0-test-zero\x001\ntest-zero\x002-test-zero\x003-test-zero\x00");
+
+        for opt in ignored_opts {
+            scene
+                .ucmd()
+                .args(&[opt, "--zero"])
+                .succeeds()
+                .stdout_only("0-test-zero\x001\ntest-zero\x002-test-zero\x003-test-zero\x00");
+        }
+
+        scene
+            .ucmd()
+            .args(&["--zero", "--quoting-style=c"])
+            .succeeds()
+            .stdout_only(
+                "\"0-test-zero\"\x00\"1\\ntest-zero\"\x00\"2-test-zero\"\x00\"3-test-zero\"\x00",
+            );
+
+        scene
+            .ucmd()
+            .args(&["--zero", "--color=always"])
+            .succeeds()
+            .stdout_only(
+                "\x1b[1;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00",
+            );
+
+        scene
+            .ucmd()
+            .args(&["--zero", "-m"])
+            .succeeds()
+            .stdout_only("0-test-zero, 1\ntest-zero, 2-test-zero, 3-test-zero\x00");
+
+        scene
+            .ucmd()
+            .args(&["--zero", "--hide-control-chars"])
+            .succeeds()
+            .stdout_only("0-test-zero\x001?test-zero\x002-test-zero\x003-test-zero\x00");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-l", "--zero"])
+        .succeeds()
+        .stdout_contains("total ");
 }
 
 #[test]
@@ -3116,4 +3236,37 @@ fn test_dereference_symlink_file_color() {
     ucmd.args(&["-L", "--color", "dir1"])
         .succeeds()
         .stdout_is(out_exp);
+}
+
+#[test]
+fn test_tabsize_option() {
+    let scene = TestScenario::new(util_name!());
+
+    scene.ucmd().args(&["-T", "3"]).succeeds();
+    scene.ucmd().args(&["--tabsize", "0"]).succeeds();
+    scene.ucmd().arg("-T").fails();
+}
+
+#[ignore = "issue #3624"]
+#[test]
+fn test_tabsize_formatting() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("aaaaaaaa");
+    at.touch("bbbb");
+    at.touch("cccc");
+    at.touch("dddddddd");
+
+    ucmd.args(&["-T", "4"])
+        .succeeds()
+        .stdout_is("aaaaaaaa bbbb\ncccc\t dddddddd");
+
+    ucmd.args(&["-T", "2"])
+        .succeeds()
+        .stdout_is("aaaaaaaa bbbb\ncccc\t\t dddddddd");
+
+    // use spaces
+    ucmd.args(&["-T", "0"])
+        .succeeds()
+        .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
 }
