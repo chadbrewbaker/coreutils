@@ -312,7 +312,7 @@ jobs:
         cd uutils
         UU_MAKE_PROFILE=debug bash util/build-gnu.sh
     - name: Run GNU tests
-      run: bash uutils/util/run-gnu-test.sh
+      run: /usr/bin/time -v bash uutils/util/run-gnu-test.sh | tail -n100 | echo
     - name: "`grcov` ~ install"
       uses: actions-rs/install@v0.1
       with:
