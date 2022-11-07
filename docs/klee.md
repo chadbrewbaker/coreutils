@@ -7,3 +7,7 @@
 [Klee guide to testing coreutils](https://klee.github.io/tutorials/testing-coreutils/)
 
 Last known klee complatable nightly is 1 January 2022?
+
+```bash
+RUSTFLAGS='--emit=llvm-ir' cargo build -Z build-std 
+```
