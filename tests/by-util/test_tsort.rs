@@ -33,6 +33,63 @@ fn test_sort_floating_nodes() {
 }
 
 #[test]
+fn test_sort_gnu_cycle_1() {
+    new_ucmd!()
+        .pipe_in("t b\nt s\ns t\n")
+        .fails()
+        .stderr_contains("tsort: -, input contains a loop:");
+       
+}
+
+#[test]
+fn test_sort_gnu_cycle_2() {
+    new_ucmd!()
+        .pipe_in("t x\nt s\ns t\n")
+        .fails()
+        .stderr_contains("tsort: -, input contains a loop:")
+        .stdout_contains("");
+        //gnu expects .stdout_contains("s\nt\nx\n")    
+}
+
+#[test]
+fn test_sort_gnu_posix_1() {
+    new_ucmd!()
+        .pipe_in("a b c c d e\ng g\nf g e f\nh h\n")
+        .succeeds()
+        .stderr_contains("")
+        .stdout_contains("a\nc\nd\nh\nb\ne\nf\ng\n");
+}
+
+#[test]
+fn test_sort_gnu_linear_1() {
+    new_ucmd!()
+        .pipe_in("a b b c c d d e e f f g\n")
+        .succeeds()
+        .stderr_contains("")
+        .stdout_contains("a\nb\nc\nd\ne\nf\ng\n");
+}
+
+#[test]
+fn test_sort_gnu_tree_1() {
+    new_ucmd!()
+        .pipe_in("a b b c c d d e e f f g\nc x x y y z\n")
+        .succeeds()
+        .stderr_contains("")
+        .stdout_contains("a\nb\nc\nd\nx\ne\ny\nf\nz\ng\n");
+        //gnu expects .stdout_contains("a\nb\nc\nx\nd\ny\ne\nz\nf\ng\n");
+}
+
+#[test]
+fn test_sort_gnu_tree_2() {
+    new_ucmd!()
+        .pipe_in("a b b c c d d e e f f g\nc x x y y z\nf r r s s t\n")
+        .succeeds()
+        .stderr_contains("")
+        .stdout_contains("a\nb\nc\nd\nx\ne\ny\nf\nz\ng\nr\ns\nt\n");
+        //gnu expects .stdout_contains("a\nb\nc\nx\nd\ny\ne\nz\nf\nr\ng\ns\nt\n");
+} 
+
+#[test]
 fn test_no_such_file() {
     new_ucmd!()
         .arg("invalid_file_txt")
