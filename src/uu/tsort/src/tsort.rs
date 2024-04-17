@@ -100,6 +100,15 @@ pub fn uu_app() -> Command {
 
 // We use String as a representation of node here
 // but using integer may improve performance.
+//
+// #[derive(Default)]
+// struct Graph<'input> {
+// labels: BTreeMap<&'input str, usize>,
+// in_edges: BTreeMap<usize, BTreeSet<usize>>,
+// out_edges: BTreeMap<usize, Vec<usize>>,
+// result: Vec<&'input str>,
+//}
+
 #[derive(Default)]
 struct Graph<'input> {
     in_edges: BTreeMap<&'input str, BTreeSet<&'input str>>,
